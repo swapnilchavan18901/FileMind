@@ -1,0 +1,211 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-py"
+  output   = "../generated/prisma"
+  enable_experimental_decimal   = true
+
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+
+enum ChatRole {
+  system
+  user
+  assistant
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum DocumentStatus {
+  processing
+  ready
+  failed
+}
+
+enum SubscriptionStatus {
+  trial
+  active
+  canceled
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  name          String?
+  role          UserRole @default(user)
+
+  bots          Bot[]
+  subscriptions Subscription[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+
+model Bot {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?
+  systemPrompt  String?
+  isActive      Boolean  @default(true)
+
+  apiKeys       ApiKey[]
+  documents     Document[]
+  chatRequests  ChatRequest[]
+  chatSessions ChatSession[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ApiKey {
+  id           String   @id @default(uuid())
+  botId        String
+  bot          Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  keyHash      String   @unique
+  name         String?
+  isActive     Boolean  @default(true)
+  lastUsedAt   DateTime?
+
+  chatRequests ChatRequest[]
+  usageMetrics UsageMetric[]
+  chatSessions ChatSession[]
+
+  createdAt    DateTime @default(now())
+}
+
+model Document {
+  id           String         @id @default(uuid())
+  botId        String
+  bot          Bot            @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  fileName     String
+  fileType     String
+  fileSize     BigInt
+  storageUrl  String
+  status       DocumentStatus @default(processing)
+
+  chunks       DocumentChunk[]
+
+  createdAt    DateTime @default(now())
+}
+
+model DocumentChunk {
+  id            String   @id @default(uuid())
+  documentId    String
+  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  botId         String
+  chunkIndex    Int
+  content       String
+  embeddingId   String   // ID from vector DB
+
+  createdAt     DateTime @default(now())
+
+  @@index([botId])
+}
+
+
+model ChatRequest {
+  id                String   @id @default(uuid())
+  botId             String
+  apiKeyId          String
+
+  bot               Bot      @relation(fields: [botId], references: [id])
+  apiKey            ApiKey   @relation(fields: [apiKeyId], references: [id])
+
+  question          String
+  response          String
+
+  promptTokens      Int?
+  completionTokens  Int?
+  latencyMs         Int?
+
+  createdAt         DateTime @default(now())
+}
+
+model ChatSession {
+  id        String   @id @default(uuid())
+  botId     String
+  apiKeyId  String?
+
+  bot       Bot     @relation(fields: [botId], references: [id])
+  apiKey    ApiKey? @relation(fields: [apiKeyId], references: [id])
+
+  messages  ChatMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChatMessage {
+  id         String     @id @default(uuid())
+  sessionId  String
+  role       ChatRole
+  content    String
+
+  session    ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime @default(now())
+
+  @@index([sessionId])
+}
+
+
+model UsageMetric {
+  id            String   @id @default(uuid())
+  apiKeyId      String
+  apiKey        ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  date          DateTime
+  requestsCount Int      @default(0)
+  tokensUsed    Int      @default(0)
+
+  createdAt     DateTime @default(now())
+
+  @@unique([apiKeyId, date])
+}
+
+model Plan {
+  id                  String   @id @default(uuid())
+  name                String
+  maxBots             Int
+  maxDocuments        Int
+  maxRequestsPerDay   Int
+  maxTokensPerMonth   Int
+  price               Decimal
+
+  subscriptions       Subscription[]
+}
+
+
+model Subscription {
+  id          String              @id @default(uuid())
+  userId      String
+  planId      String
+  status      SubscriptionStatus
+
+  user        User                @relation(fields: [userId], references: [id])
+  plan        Plan                @relation(fields: [planId], references: [id])
+
+  startedAt   DateTime
+  endsAt      DateTime?
+}
