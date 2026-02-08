@@ -33,6 +33,7 @@ enum DocumentStatus {
   processing
   ready
   failed
+  queued
 }
 
 enum SubscriptionStatus {

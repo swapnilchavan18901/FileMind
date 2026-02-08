@@ -4,4 +4,6 @@
 generated/prisma
 
 .venv
+consumer/.venv
+consumer/.env
 __pycache__

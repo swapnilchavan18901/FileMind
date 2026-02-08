@@ -9,7 +9,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = decode_access_token(token)
-        user_id: str = payload.get("id")
+        user_id: str = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=401)
     except JWTError:
