@@ -28,7 +28,7 @@ async def testing(
             question=request.question,
         )
         return {
-            "message": context,
+            "context": context,
         }
    except Exception as e:
     raise HTTPException(status_code=500, detail=str(e))

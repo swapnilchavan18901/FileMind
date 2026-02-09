@@ -25,18 +25,19 @@ async def retrieve_relevant_chunks(
     
     # 2. Search Qdrant
     print(f"collectionnameishere{collection_name}")
-    results = await qdrant_client.query_points(
+    results = qdrant_client.query_points(
         collection_name=collection_name,
         query=query_vector,
     )
 
-    # 3. Extract chunk text
-    # chunks = []
-    # for r in results:
-    #     chunks.append({
-    #         "score": r.score,
-    #         "text": r.payload.get("text"),
-    #         "metadata": r.payload
-    #     })
-    # print(f"chunksishere{chunks}")
-    return results
+    # 3. Extract only relevant data for AI
+    relevant_data = []
+    for point in results.points:
+        relevant_data.append({
+            "text": point.payload.get("text"),
+            "score": point.score,
+            "file_name": point.payload.get("file_name"),
+            "page": point.payload.get("page")
+        })
+    
+    return relevant_data
