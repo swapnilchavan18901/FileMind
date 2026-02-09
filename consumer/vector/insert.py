@@ -81,16 +81,32 @@ def split_text_recursive(text: str, chunk_size: int = CHUNK_SIZE, chunk_overlap:
     return chunks
 
 
-async def embed_texts_async(texts: list[str]) -> list[list[float]]:
+async def embed_texts_async(texts: list[str], batch_size: int = 1000) -> list[list[float]]:
     """
-    Async function to embed multiple texts using OpenAI API.
+    Async function to embed multiple texts using OpenAI API with batching.
     Returns a list of embedding vectors.
+    
+    Batches requests to respect OpenAI's 300K token limit per request.
+    Each chunk is ~250 tokens (1000 chars / 4), so 1000 chunks = ~250K tokens (safe margin).
     """
-    response = await openai_client.embeddings.create(
-        model="text-embedding-3-small",
-        input=texts
-    )
-    return [item.embedding for item in response.data]
+    all_embeddings = []
+    
+    # Process in batches to avoid token limit
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        batch_num = (i // batch_size) + 1
+        total_batches = (len(texts) + batch_size - 1) // batch_size
+        
+        print(f"      Embedding batch {batch_num}/{total_batches} ({len(batch)} chunks)...")
+        
+        response = await openai_client.embeddings.create(
+            model="text-embedding-3-small",
+            input=batch
+        )
+        batch_embeddings = [item.embedding for item in response.data]
+        all_embeddings.extend(batch_embeddings)
+    
+    return all_embeddings
 
 async def _embed_and_store_async(
     docs,
@@ -170,7 +186,7 @@ async def _embed_and_store_async(
     print(f"   💾 Upserting {len(points)} points to '{collection_name}' in batches...")
     batch_size = 100
     total_batches = (len(points) + batch_size - 1) // batch_size
-    
+    # think of way we can do this in parallel 
     for i in range(0, len(points), batch_size):
         batch = points[i:i + batch_size]
         batch_num = (i // batch_size) + 1

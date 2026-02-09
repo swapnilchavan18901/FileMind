@@ -10,7 +10,6 @@ async def embed_text(text: str) -> list[float]:
         model="text-embedding-3-small",
         input=text
     )
-    print(f"responseishere{response}")
     return response.data[0].embedding
 
 async def retrieve_relevant_chunks(
@@ -18,13 +17,10 @@ async def retrieve_relevant_chunks(
     question: str,
     top_k: int = 5
 ):
-    print("retrieving relevant chunks")
     # 1. Embed the question
     query_vector = await embed_text(question)
-    print(f"queryvectorishere{len(query_vector)}")
     
     # 2. Search Qdrant
-    print(f"collectionnameishere{collection_name}")
     results = qdrant_client.query_points(
         collection_name=collection_name,
         query=query_vector,
