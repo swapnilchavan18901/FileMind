@@ -1,16 +1,16 @@
 import json
-import pika
+import aio_pika
 from src.producer.rabbit_mq import get_connection
 
 QUEUE = "document_process_queue"
 
-def publish_document_job(document_id: str, bot_id: str, user_id: str):
-    connection = get_connection()
-    channel = connection.channel()
+async def publish_document_job(document_id: str, bot_id: str, user_id: str):
+    connection = await get_connection()
+    channel = await connection.channel()
 
     # Declare durable queue
-    channel.queue_declare(
-        queue=QUEUE,
+    await channel.declare_queue(
+        QUEUE,
         durable=True
     )
 
@@ -20,22 +20,15 @@ def publish_document_job(document_id: str, bot_id: str, user_id: str):
         "user_id": user_id
     }
 
-    channel.basic_publish(
-        exchange="",              # default exchange
-        routing_key=QUEUE,         # queue name
-        body=json.dumps(payload),
-        properties=pika.BasicProperties(
-            delivery_mode=2        # persistent
+    message = aio_pika.Message(
+            body=json.dumps(payload).encode(),
+            delivery_mode=aio_pika.DeliveryMode.PERSISTENT
         )
+
+    await channel.default_exchange.publish(
+        message,
+        routing_key=QUEUE
     )
 
-    connection.close()
+    await connection.close()
     print("📨 Job published:", payload)
-
-
-if __name__ == "__main__":
-    publish_document_job(
-        document_id="doc-123",
-        bot_id="bot-456",
-        user_id="user-789"
-    )

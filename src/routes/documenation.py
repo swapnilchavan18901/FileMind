@@ -22,6 +22,7 @@ async def create_upload_url(
     #     raise HTTPException(status_code=404, detail="Bot not found")
 
     # 2️⃣ Validate file (PDF only)
+    print(f"payloadishere { payload }")
     if payload.fileSize > 50 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large")
 

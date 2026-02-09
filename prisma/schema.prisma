@@ -104,26 +104,9 @@ model Document {
   storageUrl  String
   status       DocumentStatus @default(processing)
 
-  chunks       DocumentChunk[]
 
   createdAt    DateTime @default(now())
 }
-
-model DocumentChunk {
-  id            String   @id @default(uuid())
-  documentId    String
-  document      Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-
-  botId         String
-  chunkIndex    Int
-  content       String
-  embeddingId   String   // ID from vector DB
-
-  createdAt     DateTime @default(now())
-
-  @@index([botId])
-}
-
 
 model ChatRequest {
   id                String   @id @default(uuid())
