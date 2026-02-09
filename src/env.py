@@ -12,6 +12,7 @@ class Env(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
     RABBIT_MQ_URL: str
     RABBIT_MQ_API_KEY: str
+    OPENAI_API_KEY:str
     class Config:
         env_file = "../.env"
         case_sensitive = True

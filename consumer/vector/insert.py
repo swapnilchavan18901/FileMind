@@ -7,6 +7,7 @@ from langchain_openai import OpenAIEmbeddings
 from qdrant_client.models import PointStruct
 from consumer.vector.qdrantdb import qdrant_client
 from consumer.consumer_env import env
+from consumer.vector.vector import ensure_collection
 
 splitter = RecursiveCharacterTextSplitter(
     chunk_size=1000,
@@ -17,7 +18,6 @@ embeddings = OpenAIEmbeddings(
     model="text-embedding-3-small",
     api_key=env.OPENAI_API_KEY,
 )
-QDRANT_COLLECTION = "fileMind"
 
 def _embed_and_store_sync(
     docs,
@@ -27,8 +27,12 @@ def _embed_and_store_sync(
     user_id: str
 ):
     """Synchronous helper for embedding and storing"""
+    # Get collection name based on bot_id
+    collection_name = bot_id
+    
     # Don't print the entire document list - it's too long
-    print(f"📚 Processing {len(docs)} pages from '{file_name}'")
+    print(f"📚 Processing {len(docs)} pages from '{file_name}' for bot '{bot_id}'")
+    print(f"   Target collection: '{collection_name}'")
     
     # Check if documents have any content
     pages_with_content = sum(1 for doc in docs if doc.page_content and doc.page_content.strip())
@@ -66,7 +70,6 @@ def _embed_and_store_sync(
                 id=str(uuid.uuid4()),
                 vector=vector,
                 payload={
-                    "bot_id": bot_id,
                     "doc_id": doc_id,
                     "file_name": file_name,
                     "user_id": user_id,
@@ -78,7 +81,7 @@ def _embed_and_store_sync(
         )
 
     # Batch upsert for better performance and to avoid timeouts
-    print(f"   💾 Upserting {len(points)} points to Qdrant in batches...")
+    print(f"   💾 Upserting {len(points)} points to '{collection_name}' in batches...")
     batch_size = 100
     total_batches = (len(points) + batch_size - 1) // batch_size
     
@@ -87,11 +90,11 @@ def _embed_and_store_sync(
         batch_num = (i // batch_size) + 1
         print(f"      Batch {batch_num}/{total_batches}: Upserting {len(batch)} points...")
         qdrant_client.upsert(
-            collection_name=QDRANT_COLLECTION,
+            collection_name=collection_name,
             points=batch
         )
     
-    print(f"✅ Successfully stored {len(points)} chunks in Qdrant")
+    print(f"✅ Successfully stored {len(points)} chunks in collection '{collection_name}'")
 
 async def embed_and_store(
     docs,
@@ -101,6 +104,9 @@ async def embed_and_store(
     user_id: str
 ):
     """Async wrapper for embedding and storing using thread pool"""
+    # Ensure collection exists for this bot_id before storing
+    await ensure_collection(bot_id)
+    
     await asyncio.to_thread(
         _embed_and_store_sync,
         docs,

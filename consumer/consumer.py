@@ -22,10 +22,11 @@ async def process_document(payload: dict):
     document_id = payload.get("document_id")
     bot_id = payload.get("bot_id")
     user_id = payload.get("user_id")
-
+    print(f"botIdishere{bot_id}")
     document = await prisma.document.find_first(
         where={"id": document_id}
     )
+    
     print(f"documentishere { document }")
     if not document:
         print(f"❌ Document not found in database: {document_id}")
@@ -33,9 +34,10 @@ async def process_document(payload: dict):
 
     document_path = document.storageUrl
     print(f"📄 Loading document from S3: {document_path}")
-
+    print(f"botIdishere{bot_id}")
     # Async loading from S3 - returns (docs, temp_file_path)
     document_data, temp_file_path = await load_pdf_from_s3(document_path)
+    print(f"botIdishere{bot_id}")
 
     try:
         # Async embedding and storage

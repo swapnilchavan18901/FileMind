@@ -49,7 +49,7 @@ def clear_collection():
         
         # Recreate the collection
         print(f"🔄 Recreating collection '{QDRANT_COLLECTION}'...")
-        asyncio.run(ensure_collection())
+        # asyncio.run(ensure_collection())
         
         # Verify it's empty
         collection_info = qdrant_client.get_collection(QDRANT_COLLECTION)

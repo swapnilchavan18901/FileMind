@@ -7,3 +7,11 @@ qdrant_client = QdrantClient(
     api_key=env.QDRANT_DB_API_KEY,
     timeout=120,  # 2 minutes timeout for large batch operations
 )
+
+def collection_exists(bot_id: str) -> bool:
+    """Check if a collection exists in Qdrant"""
+    try:
+        qdrant_client.get_collection(bot_id)
+        return True
+    except Exception:
+        return False
