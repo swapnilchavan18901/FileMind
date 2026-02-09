@@ -3,11 +3,17 @@ import boto3
 import tempfile
 import asyncio
 import os
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_core.documents import Document
+from pypdf import PdfReader
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from consumer.consumer_env import env
+
+
+class Document:
+    """Simple Document class to replace langchain Document"""
+    def __init__(self, page_content: str, metadata: dict = None):
+        self.page_content = page_content
+        self.metadata = metadata or {}
 
 # Match the exact S3 configuration from src/utils/s3.py
 s3 = boto3.client(
@@ -95,8 +101,21 @@ def _load_pdf_from_s3_sync(key: str) -> tuple[list[Document], str]:
             print(f"✅ Successfully downloaded!")
             
             print(f"📖 Loading PDF...")
-            loader = PyPDFLoader(tmp_path)
-            docs = loader.load()
+            reader = PdfReader(tmp_path)
+            
+            # Extract text from each page and create Document objects
+            docs = []
+            for page_num, page in enumerate(reader.pages):
+                text = page.extract_text()
+                doc = Document(
+                    page_content=text,
+                    metadata={
+                        "page": page_num + 1,  # 1-indexed page numbers
+                        "source": key,
+                        "total_pages": len(reader.pages)
+                    }
+                )
+                docs.append(doc)
             
             # Count pages with content
             pages_with_content = sum(1 for doc in docs if doc.page_content and doc.page_content.strip())

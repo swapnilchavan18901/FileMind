@@ -2,31 +2,104 @@
 
 import uuid
 import asyncio
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
+from openai import AsyncOpenAI
 from qdrant_client.models import PointStruct
 from consumer.vector.qdrantdb import qdrant_client
 from consumer.consumer_env import env
 from consumer.vector.vector import ensure_collection
 
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200
-)
+# Initialize Async OpenAI client
+openai_client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
 
-embeddings = OpenAIEmbeddings(
-    model="text-embedding-3-small",
-    api_key=env.OPENAI_API_KEY,
-)
+# Text splitter configuration
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 200
 
-def _embed_and_store_sync(
+
+def split_text_recursive(text: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: int = CHUNK_OVERLAP, separators: list[str] = None) -> list[str]:
+    """
+    Simple recursive text splitter - splits text into chunks with overlap.
+    Alternative to LangChain's RecursiveCharacterTextSplitter.
+    """
+    if separators is None:
+        separators = ["\n\n", "\n", ". ", " ", ""]
+    
+    chunks = []
+    
+    def _split(text: str, separators: list[str]) -> list[str]:
+        if not text:
+            return []
+        
+        # Try each separator
+        for i, separator in enumerate(separators):
+            if separator == "":
+                # Last separator - split by character
+                return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size - chunk_overlap)]
+            
+            if separator in text:
+                splits = text.split(separator)
+                result = []
+                current_chunk = ""
+                
+                for split in splits:
+                    # Re-add separator except for empty splits
+                    split_with_sep = split + separator if split else ""
+                    
+                    if len(current_chunk) + len(split_with_sep) <= chunk_size:
+                        current_chunk += split_with_sep
+                    else:
+                        if current_chunk:
+                            result.append(current_chunk)
+                        # If single split is larger than chunk_size, recursively split it
+                        if len(split_with_sep) > chunk_size:
+                            result.extend(_split(split_with_sep, separators[i + 1:]))
+                            current_chunk = ""
+                        else:
+                            current_chunk = split_with_sep
+                
+                if current_chunk:
+                    result.append(current_chunk)
+                
+                return result
+        
+        return [text]
+    
+    chunks = _split(text, separators)
+    
+    # Add overlap between chunks
+    if chunk_overlap > 0 and len(chunks) > 1:
+        overlapped_chunks = []
+        for i, chunk in enumerate(chunks):
+            if i == 0:
+                overlapped_chunks.append(chunk)
+            else:
+                # Take overlap from previous chunk
+                overlap = chunks[i - 1][-chunk_overlap:] if len(chunks[i - 1]) >= chunk_overlap else chunks[i - 1]
+                overlapped_chunks.append(overlap + chunk)
+        return overlapped_chunks
+    
+    return chunks
+
+
+async def embed_texts_async(texts: list[str]) -> list[list[float]]:
+    """
+    Async function to embed multiple texts using OpenAI API.
+    Returns a list of embedding vectors.
+    """
+    response = await openai_client.embeddings.create(
+        model="text-embedding-3-small",
+        input=texts
+    )
+    return [item.embedding for item in response.data]
+
+async def _embed_and_store_async(
     docs,
     bot_id: str,
     doc_id: str,
     file_name: str,
     user_id: str
 ):
-    """Synchronous helper for embedding and storing"""
+    """Async helper for embedding and storing"""
     # Get collection name based on bot_id
     collection_name = bot_id
     
@@ -51,20 +124,33 @@ def _embed_and_store_sync(
     docs_with_content = [doc for doc in docs if doc.page_content and doc.page_content.strip()]
     print(f"   Splitting {len(docs_with_content)} non-empty pages into chunks...")
     
-    chunks = splitter.split_documents(docs_with_content)
-    print(f"   ✅ Created {len(chunks)} chunks")
+    # Split each document into chunks
+    all_chunks = []
+    for doc in docs_with_content:
+        text = doc.page_content
+        text_chunks = split_text_recursive(text, CHUNK_SIZE, CHUNK_OVERLAP)
+        
+        # Keep track of metadata for each chunk
+        for chunk_text in text_chunks:
+            all_chunks.append({
+                "text": chunk_text,
+                "page": doc.metadata.get("page"),
+                "metadata": doc.metadata
+            })
     
-    if not chunks:
+    print(f"   ✅ Created {len(all_chunks)} chunks")
+    
+    if not all_chunks:
         raise ValueError(f"No chunks created from document '{file_name}'. Document may be empty.")
     
-    print(f"   🔄 Generating embeddings for {len(chunks)} chunks...")
-    texts = [c.page_content for c in chunks]
-    vectors = embeddings.embed_documents(texts)
+    print(f"   🔄 Generating embeddings for {len(all_chunks)} chunks...")
+    texts = [chunk["text"] for chunk in all_chunks]
+    vectors = await embed_texts_async(texts)
     print(f"   ✅ Embeddings generated")
 
-    print(f"   📦 Preparing {len(chunks)} points for Qdrant...")
+    print(f"   📦 Preparing {len(all_chunks)} points for Qdrant...")
     points = []
-    for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+    for i, (chunk, vector) in enumerate(zip(all_chunks, vectors)):
         points.append(
             PointStruct(
                 id=str(uuid.uuid4()),
@@ -73,9 +159,9 @@ def _embed_and_store_sync(
                     "doc_id": doc_id,
                     "file_name": file_name,
                     "user_id": user_id,
-                    "page": chunk.metadata.get("page"),
+                    "page": chunk.get("page"),
                     "chunk_index": i,
-                    "text": chunk.page_content
+                    "text": chunk["text"]
                 }
             )
         )
@@ -89,7 +175,9 @@ def _embed_and_store_sync(
         batch = points[i:i + batch_size]
         batch_num = (i // batch_size) + 1
         print(f"      Batch {batch_num}/{total_batches}: Upserting {len(batch)} points...")
-        qdrant_client.upsert(
+        # Use asyncio.to_thread for synchronous Qdrant client
+        await asyncio.to_thread(
+            qdrant_client.upsert,
             collection_name=collection_name,
             points=batch
         )
@@ -103,12 +191,12 @@ async def embed_and_store(
     file_name: str,
     user_id: str
 ):
-    """Async wrapper for embedding and storing using thread pool"""
+    """Async function for embedding and storing"""
     # Ensure collection exists for this bot_id before storing
     await ensure_collection(bot_id)
     
-    await asyncio.to_thread(
-        _embed_and_store_sync,
+    # Directly call the async function
+    await _embed_and_store_async(
         docs,
         bot_id,
         doc_id,

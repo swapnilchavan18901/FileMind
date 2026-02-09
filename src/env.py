@@ -13,6 +13,8 @@ class Env(BaseSettings):
     RABBIT_MQ_URL: str
     RABBIT_MQ_API_KEY: str
     OPENAI_API_KEY:str
+    QDRANT_DB_CLUSTER_URL:str
+    QDRANT_DB_API_KEY:str
     class Config:
         env_file = "../.env"
         case_sensitive = True
