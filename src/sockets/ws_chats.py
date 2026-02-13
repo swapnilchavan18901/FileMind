@@ -8,4 +8,4 @@ sio = socketio.AsyncServer(
 socket_app = socketio.ASGIApp(sio)
 
 # 👇 IMPORT HANDLERS SO EVENTS REGISTER
-from src.sockets import handlers
+import src.sockets.handlers  # noqa: F401, E402

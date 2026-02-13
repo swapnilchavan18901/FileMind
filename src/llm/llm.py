@@ -17,7 +17,20 @@ async def llm_api_call(system_prompt: str, bot_prompt: str, user_prompt: str, co
     """
     client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
     
-    final_prompt = f"{system_prompt}\n\n this is the bot prompt follow these instructions strictly for chat purpose  {bot_prompt}\n\n this is context of the document for the user query and you should ans from this context only if the ans is not in this context then say i don't understand the question. Context: {context}"
+    # --- Build structured system prompt ---
+    context_block = "\n\n".join(
+        f"[Source: {chunk.get('file_name', 'unknown')}, Page: {chunk.get('page', 'N/A')}]\n{chunk.get('text', '')}"
+        for chunk in context
+    ) if context else "No relevant context found."
+
+    final_prompt = (
+        f"{system_prompt}\n\n"
+        f"## Bot-Specific Instructions\n"
+        f"Follow these instructions strictly when responding:\n{bot_prompt}\n\n"
+        f"## Context (from uploaded documents)\n"
+        f"Use ONLY the following excerpts to answer the user's question.\n\n"
+        f"{context_block}"
+    )
 
     try:
         # Use proper role-based message structure

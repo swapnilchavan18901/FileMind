@@ -1,6 +1,6 @@
 from datetime import datetime ,timedelta
-from jose import jwt
 from typing import Dict
+from jose import jwt
 from src.env import env
 
 SECRET_KEY = env.JWT_SECRET
