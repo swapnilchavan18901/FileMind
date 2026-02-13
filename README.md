@@ -169,7 +169,7 @@ QDRANT_DB_CLUSTER_URL=https://...      QDRANT_DB_API_KEY=...
 # 1. Backend (Producer API)
 cd FileMind && pip install -r requirements.txt
 prisma generate && prisma db push
-uvicorn main:app --reload                  # → http://localhost:8000
+fastapi dev main.py                 # → http://localhost:8000
 
 # 2. Consumer Worker (separate terminal)
 cd FileMind && pip install -r consumer/requirements.txt
